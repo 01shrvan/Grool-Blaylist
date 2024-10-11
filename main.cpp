@@ -1,506 +1,412 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <iomanip>
-#include <ctime>
-#include <fstream>
-#include <algorithm>
 #include <map>
+#include <random>
+#include <algorithm>
 #include <chrono>
 #include <thread>
+#include <iomanip>
+#include <fstream>
+#include <ctime>
+#include <sstream>
 
-using namespace std;
+// ANSI color codes for console output
+#define RESET   "\033[0m"
+#define RED     "\033[31m"
+#define GREEN   "\033[32m"
+#define YELLOW  "\033[33m"
+#define BLUE    "\033[34m"
+#define MAGENTA "\033[35m"
+#define CYAN    "\033[36m"
 
-class Task {
+class Song {
 public:
-    string description;
-    bool completed;
-    chrono::system_clock::time_point deadline;
+    std::string title;
+    std::string artist;
+    std::vector<std::string> moods;
+    int energy;
+    int danceability;
+    int year;
+    int playCount;
 
-    Task(const string& desc, const chrono::system_clock::time_point& dl)
-        : description(desc), completed(false), deadline(dl) {}
-};
+    Song() : title(""), artist(""), energy(0), danceability(0), year(0), playCount(0) {}
 
-class Project {
-public:
-    string name;
-    string description;
-    string type;
-    vector<Task> tasks;
-    chrono::system_clock::time_point creationDate;
-    chrono::system_clock::time_point deadline;
+    Song(std::string t, std::string a, std::vector<std::string> m, int e, int d, int y)
+        : title(t), artist(a), moods(m), energy(e), danceability(d), year(y), playCount(0) {}
 
-    Project(const string& n, const string& d, const string& t)
-        : name(n), description(d), type(t) {
-        creationDate = chrono::system_clock::now();
-    }
-
-    void addTask(const string& description, const chrono::system_clock::time_point& deadline) {
-        tasks.emplace_back(description, deadline);
-    }
-
-    int getCompletedTaskCount() const {
-        return count_if(tasks.begin(), tasks.end(), [](const Task& t) { return t.completed; });
-    }
-
-    double getProgress() const {
-        if (tasks.empty()) return 0.0;
-        return (double)getCompletedTaskCount() / tasks.size() * 100.0;
+    bool operator==(const Song& other) const {
+        return title == other.title && artist == other.artist;
     }
 };
 
-class WebDevTerminal {
+class MoodPlaylistGenerator {
 private:
-    vector<Project> projects;
-    string username;
-    map<string, string> notes;
+    std::vector<Song> songDatabase;
+    std::vector<std::string> moodOptions;
+    std::map<std::string, std::vector<Song>> userFavorites;
+    int userHappinessLevel;
+    std::map<std::string, int> moodCounts;
 
-    void clearScreen() {
-        cout << string(50, '\n');
+    void initializeSongDatabase() {
+        songDatabase = {
+            Song("Happy", "Pharrell Williams", {"happy", "energetic"}, 8, 7, 2013),
+            Song("Someone Like You", "Adele", {"sad", "emotional"}, 4, 2, 2011),
+            Song("Thunderstruck", "AC/DC", {"energetic", "powerful"}, 9, 6, 1990),
+            Song("Relaxing Piano", "John Smith", {"calm", "relaxed"}, 2, 1, 2020),
+            Song("Party Rock Anthem", "LMFAO", {"party", "energetic"}, 9, 9, 2011),
+            Song("The Scientist", "Coldplay", {"melancholy", "thoughtful"}, 3, 2, 2002),
+            Song("Don't Stop Believin'", "Journey", {"motivational", "uplifting"}, 7, 6, 1981),
+            Song("Bohemian Rhapsody", "Queen", {"epic", "emotional"}, 6, 4, 1975),
+            Song("Smooth Jazz Compilation", "Various Artists", {"relaxed", "calm"}, 3, 2, 2019),
+            Song("Eye of the Tiger", "Survivor", {"motivational", "energetic"}, 8, 7, 1982),
+            Song("Imagine", "John Lennon", {"thoughtful", "calm"}, 5, 3, 1971),
+            Song("Dancing Queen", "ABBA", {"happy", "party"}, 7, 8, 1976),
+            Song("Stairway to Heaven", "Led Zeppelin", {"epic", "thoughtful"}, 6, 4, 1971),
+            Song("Smells Like Teen Spirit", "Nirvana", {"energetic", "powerful"}, 8, 6, 1991),
+            Song("Wonderwall", "Oasis", {"melancholy", "uplifting"}, 5, 4, 1995)
+        };
+
+        moodOptions = {"happy", "sad", "energetic", "calm", "party", "melancholy", "motivational", "epic", "relaxed", "thoughtful"};
     }
 
-    void displayHeader(const string& currentPage) {
-        cout << "========================================\n";
-        cout << "Web Development Terminal - " << currentPage << "\n";
-        cout << "========================================\n";
+    void displayHeader(const std::string& title) {
+        std::cout << MAGENTA << "\n╔══════════════════════════════════════════════════════╗\n"
+                  << "║ " << std::setw(50) << std::left << title << "║\n"
+                  << "╚══════════════════════════════════════════════════════╝\n" << RESET;
     }
 
-    void displayFooter() {
-        cout << "----------------------------------------\n";
-        cout << "Press Enter to continue...";
-        cin.ignore();
-        cin.get();
-    }
-
-    string getFormattedDate(const chrono::system_clock::time_point& tp) {
-        time_t t = chrono::system_clock::to_time_t(tp);
-        string ts = ctime(&t);
-        ts.resize(ts.size() - 1);
-        return ts;
-    }
-
-public:
-    WebDevTerminal(const string& user) : username(user) {}
-
-    void displayMainMenu() {
-        clearScreen();
-        displayHeader("Main Menu");
-        cout << "1. Create a new project\n";
-        cout << "2. List all projects\n";
-        cout << "3. Manage project tasks\n";
-        cout << "4. Search projects\n";
-        cout << "5. Add/View notes\n";
-        cout << "6. Generate project report\n";
-        cout << "7. Set project deadline\n";
-        cout << "8. Save projects to file\n";
-        cout << "9. Load projects from file\n";
-        cout << "10. Exit\n";
-        cout << "Choose an option: ";
-    }
-
-    void createProject() {
-        clearScreen();
-        displayHeader("Create Project");
-        string name, description, type;
-
-        cout << "Enter project name: ";
-        cin.ignore();
-        getline(cin, name);
-        cout << "Enter project description: ";
-        getline(cin, description);
-        cout << "Enter project type: ";
-        getline(cin, type);
-
-        projects.emplace_back(name, description, type);
-        cout << "Project '" << name << "' created successfully!\n";
-        displayFooter();
-    }
-
-    void listProjects() {
-        clearScreen();
-        displayHeader("Projects List");
-        if (projects.empty()) {
-            cout << "No projects found.\n";
-        } else {
-            cout << left << setw(5) << "ID" << setw(20) << "Name" << setw(15) << "Type" << setw(20) << "Creation Date" << "Progress\n";
-            cout << string(80, '-') << "\n";
-            for (size_t i = 0; i < projects.size(); ++i) {
-                cout << left << setw(5) << i + 1 
-                     << setw(20) << projects[i].name 
-                     << setw(15) << projects[i].type
-                     << setw(20) << getFormattedDate(projects[i].creationDate)
-                     << fixed << setprecision(2) << projects[i].getProgress() << "%\n";
-            }
+    void slowPrint(const std::string& text, int delay = 30) {
+        for (char c : text) {
+            std::cout << c << std::flush;
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
         }
-        displayFooter();
+        std::cout << std::endl;
     }
 
-    void manageProjectTasks() {
-        clearScreen();
-        displayHeader("Manage Project Tasks");
-        if (projects.empty()) {
-            cout << "No projects available.\n";
-            displayFooter();
-            return;
+    std::string getUserMood() {
+        std::cout << CYAN << "How are you feeling today? Choose a mood:\n" << RESET;
+        for (size_t i = 0; i < moodOptions.size(); ++i) {
+            std::cout << i + 1 << ". " << moodOptions[i] << "\n";
         }
-
-        cout << "Select a project:\n";
-        for (size_t i = 0; i < projects.size(); ++i) {
-            cout << i + 1 << ". " << projects[i].name << "\n";
-        }
-
-        size_t projectIndex;
-        cout << "Enter project number: ";
-        cin >> projectIndex;
-        projectIndex--;
-
-        if (projectIndex >= projects.size()) {
-            cout << "Invalid project number.\n";
-            displayFooter();
-            return;
-        }
-
-        Project& project = projects[projectIndex];
-
-        while (true) {
-            clearScreen();
-            displayHeader("Manage Tasks for " + project.name);
-            cout << "1. Add task\n";
-            cout << "2. List tasks\n";
-            cout << "3. Mark task as completed\n";
-            cout << "4. Return to main menu\n";
-            cout << "Choose an option: ";
-
-            int choice;
-            cin >> choice;
-
-            switch (choice) {
-                case 1: {
-                    string taskDesc;
-                    cout << "Enter task description: ";
-                    cin.ignore();
-                    getline(cin, taskDesc);
-
-                    int days;
-                    cout << "Enter task deadline (days from now): ";
-                    cin >> days;
-
-                    auto deadline = chrono::system_clock::now() + chrono::hours(24 * days);
-                    project.addTask(taskDesc, deadline);
-                    cout << "Task added successfully!\n";
-                    break;
-                }
-                case 2: {
-                    cout << "Tasks for " << project.name << ":\n";
-                    for (size_t i = 0; i < project.tasks.size(); ++i) {
-                        cout << i + 1 << ". " << (project.tasks[i].completed ? "[X] " : "[ ] ")
-                             << project.tasks[i].description << " (Due: " 
-                             << getFormattedDate(project.tasks[i].deadline) << ")\n";
-                    }
-                    break;
-                }
-                case 3: {
-                    if (project.tasks.empty()) {
-                        cout << "No tasks available.\n";
-                    } else {
-                        cout << "Enter task number to mark as completed: ";
-                        size_t taskIndex;
-                        cin >> taskIndex;
-                        taskIndex--;
-                        if (taskIndex < project.tasks.size()) {
-                            project.tasks[taskIndex].completed = true;
-                            cout << "Task marked as completed.\n";
-                        } else {
-                            cout << "Invalid task number.\n";
-                        }
-                    }
-                    break;
-                }
-                case 4:
-                    return;
-                default:
-                    cout << "Invalid choice.\n";
-            }
-            displayFooter();
-        }
-    }
-
-    void searchProjects() {
-        clearScreen();
-        displayHeader("Search Projects");
-        string searchTerm;
-        cout << "Enter search term: ";
-        cin.ignore();
-        getline(cin, searchTerm);
-
-        vector<Project> results;
-        for (const auto& project : projects) {
-            if (project.name.find(searchTerm) != string::npos || 
-                project.description.find(searchTerm) != string::npos ||
-                project.type.find(searchTerm) != string::npos) {
-                results.push_back(project);
-            }
-        }
-
-        if (results.empty()) {
-            cout << "No matching projects found.\n";
-        } else {
-            cout << "Matching Projects:\n";
-            cout << left << setw(20) << "Name" << setw(15) << "Type" << "Description\n";
-            cout << string(80, '-') << "\n";
-            for (const auto& project : results) {
-                cout << left << setw(20) << project.name 
-                     << setw(15) << project.type
-                     << project.description << "\n";
-            }
-        }
-        displayFooter();
-    }
-
-    void manageNotes() {
-        clearScreen();
-        displayHeader("Manage Notes");
-        cout << "1. Add note\n";
-        cout << "2. View notes\n";
-        cout << "3. Return to main menu\n";
-        cout << "Choose an option: ";
 
         int choice;
-        cin >> choice;
-
-        switch (choice) {
-            case 1: {
-                string noteTitle, noteContent;
-                cout << "Enter note title: ";
-                cin.ignore();
-                getline(cin, noteTitle);
-                cout << "Enter note content: ";
-                getline(cin, noteContent);
-                notes[noteTitle] = noteContent;
-                cout << "Note added successfully!\n";
-                break;
+        while (true) {
+            std::cout << YELLOW << "Enter your choice (1-" << moodOptions.size() << "): " << RESET;
+            std::cin >> choice;
+            if (choice > 0 && choice <= static_cast<int>(moodOptions.size())) {
+                moodCounts[moodOptions[choice - 1]]++;
+                return moodOptions[choice - 1];
             }
-            case 2: {
-                if (notes.empty()) {
-                    cout << "No notes available.\n";
+            std::cout << RED << "Invalid choice. Please try again.\n" << RESET;
+        }
+    }
+
+    std::vector<Song> generatePlaylist(const std::string& mood, int playlistSize) {
+        std::vector<Song> matchingSongs;
+        for (const auto& song : songDatabase) {
+            if (std::find(song.moods.begin(), song.moods.end(), mood) != song.moods.end()) {
+                matchingSongs.push_back(song);
+            }
+        }
+
+        // Add user favorites that match the mood
+        for (const auto& favorite : userFavorites[mood]) {
+            if (std::find(matchingSongs.begin(), matchingSongs.end(), favorite) == matchingSongs.end()) {
+                matchingSongs.push_back(favorite);
+            }
+        }
+
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(matchingSongs.begin(), matchingSongs.end(), g);
+
+        // Sort by energy level for more coherent playlist flow
+        std::sort(matchingSongs.begin(), matchingSongs.end(), [](const Song& a, const Song& b) {
+            return a.energy < b.energy;
+        });
+
+        if (matchingSongs.size() > static_cast<size_t>(playlistSize)) {
+            matchingSongs.resize(playlistSize);
+        }
+
+        // Increment play count for selected songs
+        for (auto& song : matchingSongs) {
+            song.playCount++;
+        }
+
+        return matchingSongs;
+    }
+
+    void displayPlaylist(const std::vector<Song>& playlist) {
+        std::cout << GREEN << "\nYour AI-generated playlist:\n" << RESET;
+        for (size_t i = 0; i < playlist.size(); ++i) {
+            std::cout << CYAN << i + 1 << ". " << playlist[i].title << " - " << playlist[i].artist << " (" << playlist[i].year << ")" << RESET;
+            std::cout << " [Energy: " << std::string(playlist[i].energy, '|') 
+                      << ", Danceability: " << std::string(playlist[i].danceability, '|') 
+                      << ", Plays: " << playlist[i].playCount << "]\n";
+        }
+    }
+
+    void simulateAIProcessing() {
+        std::vector<std::string> steps = {
+            "Analyzing your mood...",
+            "Scanning music database...",
+            "Applying advanced AI algorithms...",
+            "Optimizing song selection based on user preferences...",
+            "Considering song energy levels for smooth transitions...",
+            "Analyzing play history for personalized recommendations...",
+            "Finalizing personalized playlist..."
+        };
+
+        for (const auto& step : steps) {
+            slowPrint(YELLOW + step + RESET);
+            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        }
+    }
+
+    void displayMoodAnalysis(const std::string& mood) {
+        std::cout << BLUE << "\nMood Analysis:\n" << RESET;
+        std::cout << "Your current mood: " << mood << "\n";
+        std::cout << "Happiness level: [";
+        for (int i = 0; i < 10; ++i) {
+            if (i < userHappinessLevel) {
+                std::cout << "#";
+            } else {
+                std::cout << "-";
+            }
+        }
+        std::cout << "] (" << userHappinessLevel << "/10)\n";
+
+        // Display mood history
+        std::cout << "\nYour mood history:\n";
+        for (const auto& pair : moodCounts) {
+            std::cout << pair.first << ": " << std::string(pair.second, '*') << "\n";
+        }
+    }
+
+    void provideMoodRecommendation(const std::string& mood) {
+        std::cout << GREEN << "\nMood Recommendation:\n" << RESET;
+        if (mood == "sad" || mood == "melancholy") {
+            std::cout << "Consider engaging in activities you enjoy or reaching out to friends for support.\n";
+        } else if (mood == "happy" || mood == "energetic") {
+            std::cout << "Channel your positive energy into a creative project or share your enthusiasm with others.\n";
+        } else if (mood == "calm" || mood == "relaxed") {
+            std::cout << "This is an ideal time for meditation, journaling, or focusing on personal growth.\n";
+        } else {
+            std::cout << "Embrace your current mood and use it as inspiration for your day's activities.\n";
+        }
+    }
+
+    void displayAsciiArt() {
+        std::cout << CYAN << R"(
+   _____                 _   ____  _             _ _     _   
+  / ____|               | | |  _ \| |           | (_)   | |  
+ | |  __ _ __ ___   ___ | | | |_) | | __ _ _   _| |_ ___| |_ 
+ | | |_ | '__/ _ \ / _ \| | |  _ <| |/ _` | | | | | / __| __|
+ | |__| | | | (_) | (_) | | | |_) | | (_| | |_| | | \__ \ |_ 
+  \_____|_|  \___/ \___/|_| |____/|_|\__,_|\__, |_|_|___/\__|
+                                            __/ |            
+                                           |___/             
+)" << RESET;
+    }
+
+    void saveUserPreferences() {
+        std::ofstream file("user_preferences.txt");
+        if (file.is_open()) {
+            file << userHappinessLevel << "\n";
+            for (const auto& pair : userFavorites) {
+                file << pair.first << "\n";
+                for (const auto& song : pair.second) {
+                    file << song.title << "," << song.artist << "\n";
+                }
+                file << "END_MOOD\n";
+            }
+            for (const auto& pair : moodCounts) {
+                file << pair.first << "," << pair.second << "\n";
+            }
+            file.close();
+        }
+    }
+
+    void loadUserPreferences() {
+        std::ifstream file("user_preferences.txt");
+        if (file.is_open()) {
+            file >> userHappinessLevel;
+            std::string line;
+            std::getline(file, line); // Consume newline
+            std::string currentMood;
+            while (std::getline(file, line)) {
+                if (line == "END_MOOD") {
+                    currentMood = "";
+                } else if (currentMood.empty() && line.find(',') == std::string::npos) {
+                    currentMood = line;
+                } else if (line.find(',') != std::string::npos) {
+                    size_t commaPos = line.find(',');
+                    std::string mood = line.substr(0, commaPos);
+                    int count = std::stoi(line.substr(commaPos + 1));
+                    moodCounts[mood] = count;
                 } else {
-                    for (const auto& note : notes) {
-                        cout << "Title: " << note.first << "\n";
-                        cout << "Content: " << note.second << "\n\n";
-                    }
-                }
-                break;
-            }
-            case 3:
-                return;
-            default:
-                cout << "Invalid choice.\n";
-        }
-        displayFooter();
-    }
-
-    void generateProjectReport() {
-        clearScreen();
-        displayHeader("Generate Project Report");
-        if (projects.empty()) {
-            cout << "No projects available.\n";
-            displayFooter();
-            return;
-        }
-
-        cout << "Select a project:\n";
-        for (size_t i = 0; i < projects.size(); ++i) {
-            cout << i + 1 << ". " << projects[i].name << "\n";
-        }
-
-        size_t projectIndex;
-        cout << "Enter project number: ";
-        cin >> projectIndex;
-        projectIndex--;
-
-        if (projectIndex >= projects.size()) {
-            cout << "Invalid project number.\n";
-            displayFooter();
-            return;
-        }
-
-        const Project& project = projects[projectIndex];
-
-        cout << "\nProject Report for " << project.name << "\n";
-        cout << "==============================\n";
-        cout << "Description: " << project.description << "\n";
-        cout << "Type: " << project.type << "\n";
-        cout << "Creation Date: " << getFormattedDate(project.creationDate) << "\n";
-        if (project.deadline != chrono::system_clock::time_point()) {
-            cout << "Deadline: " << getFormattedDate(project.deadline) << "\n";
-        }
-        cout << "Progress: " << fixed << setprecision(2) << project.getProgress() << "%\n";
-        cout << "Tasks: " << project.tasks.size() << " (Completed: " << project.getCompletedTaskCount() << ")\n\n";
-
-        cout << "Task List:\n";
-        for (size_t i = 0; i < project.tasks.size(); ++i) {
-            cout << i + 1 << ". " << (project.tasks[i].completed ? "[X] " : "[ ] ")
-                 << project.tasks[i].description << " (Due: " 
-                 << getFormattedDate(project.tasks[i].deadline) << ")\n";
-        }
-
-        displayFooter();
-    }
-
-    void setProjectDeadline() {
-        clearScreen();
-        displayHeader("Set Project Deadline");
-        if (projects.empty()) {
-            cout << "No projects available.\n";
-            displayFooter();
-            return;
-        }
-
-        cout << "Select a project:\n";
-        for (size_t i = 0; i < projects.size(); ++i) {
-            cout << i + 1 << ". " << projects[i].name << "\n";
-        }
-
-        size_t projectIndex;
-        cout << "Enter project number: ";
-        cin >> projectIndex;
-        projectIndex--;
-
-        if (projectIndex >= projects.size()) {
-            cout << "Invalid project number.\n";
-            displayFooter();
-            return;
-        }
-
-        Project& project = projects[projectIndex];
-
-        int days;
-        cout << "Enter project deadline (days from now): ";
-        cin >> days;
-
-        project.deadline = chrono::system_clock::now() + chrono::hours(24 * days);
-        cout << "Deadline set successfully for " << project.name << ".\n";
-        displayFooter();
-    }
-
-    void saveProjectsToFile() {
-        ofstream file("projects.txt");
-        if (file.is_open()) {
-            for (const auto& project : projects) {
-                file << project.name << "|" << project.description << "|" << project.type << "|"
-                     << chrono::system_clock::to_time_t(project.creationDate) << "|"
-                     << chrono::system_clock::to_time_t(project.deadline) << "\n";
-
-                for (const auto& task : project.tasks) {
-                    file << "TASK|" << task.description << "|" << task.completed << "|"
-                         << chrono::system_clock::to_time_t(task.deadline) << "\n";
-                }
-                file << "ENDPROJECT\n";
-            }
-            file.close();
-            cout << "Projects saved to 'projects.txt'.\n";
-        } else {
-            cout << "Error: Unable to open file for saving.\n";
-        }
-        displayFooter();
-    }
-
-    void loadProjectsFromFile() {
-        ifstream file("projects.txt");
-        if (file.is_open()) {
-            projects.clear();
-            string line;
-            Project* currentProject = nullptr;
-
-            while (getline(file, line)) {
-                if (line == "ENDPROJECT") {
-                    currentProject = nullptr;
-                    continue;
-                }
-
-                size_t pos = line.find("|");
-                if (pos != string::npos) {
-                    string type = line.substr(0, pos);
-                    if (type == "TASK" && currentProject != nullptr) {
-                        line = line.substr(pos + 1);
-                        pos = line.find("|");
-                        string description = line.substr(0, pos);
-                        line = line.substr(pos + 1);
-                        pos = line.find("|");
-                        bool completed = (line.substr(0, pos) == "1");
-                        line = line.substr(pos + 1);
-                        time_t deadline = stoll(line);
-                        currentProject->addTask(description, chrono::system_clock::from_time_t(deadline));
-                        currentProject->tasks.back().completed = completed;
-                    } else {
-                        string name = line.substr(0, pos);
-                        line = line.substr(pos + 1);
-                        pos = line.find("|");
-                        string description = line.substr(0, pos);
-                        line = 
-
- line.substr(pos + 1);
-                        pos = line.find("|");
-                        string projectType = line.substr(0, pos);
-                        line = line.substr(pos + 1);
-                        pos = line.find("|");
-                        time_t creationDate = stoll(line.substr(0, pos));
-                        time_t deadline = stoll(line.substr(pos + 1));
-
-                        projects.emplace_back(name, description, projectType);
-                        currentProject = &projects.back();
-                        currentProject->creationDate = chrono::system_clock::from_time_t(creationDate);
-                        currentProject->deadline = chrono::system_clock::from_time_t(deadline);
+                    size_t commaPos = line.find(',');
+                    if (commaPos != std::string::npos) {
+                        std::string title = line.substr(0, commaPos);
+                        std::string artist = line.substr(commaPos + 1);
+                        for (const auto& song : songDatabase) {
+                            if (song.title == title && song.artist == artist) {
+                                userFavorites[currentMood].push_back(song);
+                                break;
+                            }
+                        }
                     }
                 }
             }
             file.close();
-            cout << "Projects loaded from 'projects.txt'.\n";
-        } else {
-            cout << "Error: Unable to open file for loading.\n";
         }
-        displayFooter();
+    }
+
+    void addToFavorites(const Song& song, const std::string& mood) {
+        userFavorites[mood].push_back(song);
+        std::cout << GREEN << "Added '" << song.title << "' to your favorites for " << mood << " mood.\n" << RESET;
+    }
+
+    void displayFavorites() {
+        std::cout << BLUE << "\nYour Favorite Songs:\n" << RESET;
+        for (const auto& pair : userFavorites) {
+            std::cout << CYAN << pair.first << " mood:\n" << RESET;
+            for (const auto& song : pair.second) {
+                std::cout << "  - " << song.title << " by " << song.artist << "\n";
+            }
+        }
+    }
+
+    void displayMostPlayedSongs() {
+        std::vector<Song> sortedSongs = songDatabase;
+        std::sort(sortedSongs.begin(), sortedSongs.end(), [](const Song& a, const Song& b) {
+            return a.playCount > b.playCount;
+        });
+
+        std::cout << BLUE << "\nYour Most Played Songs:\n" << RESET;
+        for (size_t i = 0; i < 5 && i < sortedSongs.size(); ++i) {
+            std::cout << CYAN << i + 1 << ". " << sortedSongs[i].title << " - " << sortedSongs[i].artist 
+                      << " (Plays: " << sortedSongs[i].playCount << ")\n" << RESET;
+        }
+    }
+
+    void displayMoodInsights() {
+        std::cout << BLUE << "\nMood Insights:\n" << RESET;
+
+        // Find the most common mood
+        auto maxMood = std::max_element(moodCounts.begin(), moodCounts.end(),
+            [](const auto& p1, const auto& p2) { return p1.second < p2.second; });
+
+        std::cout << "Your most common mood: " << maxMood->first << "\n";
+
+        // Calculate average happiness level
+        int totalMoods = 0;
+        int weightedHappiness = 0;
+        std::map<std::string, int> moodWeights = {
+            {"happy", 10}, {"sad", 2}, {"energetic", 8}, {"calm", 6},
+
+            {"party", 9}, {"melancholy", 3}, {"motivational", 7},
+            {"epic", 8}, {"relaxed", 7}, {"thoughtful", 6}
+        };
+
+        for (const auto& pair : moodCounts) {
+            totalMoods += pair.second;
+            weightedHappiness += pair.second * moodWeights[pair.first];
+        }
+
+        double averageHappiness = totalMoods > 0 ? static_cast<double>(weightedHappiness) / totalMoods : 5.0;
+        std::cout << "Your average happiness level: " << std::fixed << std::setprecision(2) << averageHappiness << "/10\n";
+
+        // Provide a mood-based recommendation
+        std::cout << "\nBased on your mood history, we recommend:\n";
+        if (averageHappiness < 5.0) {
+            std::cout << "Consider listening to more uplifting and energetic music to boost your mood.\n";
+        } else if (averageHappiness >= 5.0 && averageHappiness < 7.0) {
+            std::cout << "Your mood seems balanced. Try exploring new genres to discover more music you might enjoy.\n";
+        } else {
+            std::cout << "You're in a great mood! Share your positive energy by creating and sharing playlists with friends.\n";
+        }
+    }
+
+public:
+    MoodPlaylistGenerator() : userHappinessLevel(5) {
+        initializeSongDatabase();
+        loadUserPreferences();
     }
 
     void run() {
-        int choice;
-        do {
-            displayMainMenu();
-            cin >> choice;
+        bool exitProgram = false;
+        while (!exitProgram) {
+            displayAsciiArt();
+            displayHeader("AI Mood-Based Playlist Generator");
+
+            std::cout << YELLOW << "1. Generate Playlist\n2. View Favorites\n3. Update Happiness Level\n"
+                      << "4. View Most Played Songs\n5. View Mood Insights\n6. Exit\n" << RESET;
+            int choice;
+            std::cout << "Enter your choice: ";
+            std::cin >> choice;
 
             switch (choice) {
-                case 1: createProject(); break;
-                case 2: listProjects(); break;
-                case 3: manageProjectTasks(); break;
-                case 4: searchProjects(); break;
-                case 5: manageNotes(); break;
-                case 6: generateProjectReport(); break;
-                case 7: setProjectDeadline(); break;
-                case 8: saveProjectsToFile(); break;
-                case 9: loadProjectsFromFile(); break;
-                case 10: 
-                    cout << "Exiting program. Goodbye, " << username << "!\n";
+                case 1: {
+                    std::string mood = getUserMood();
+                    simulateAIProcessing();
+                    displayMoodAnalysis(mood);
+                    std::vector<Song> playlist = generatePlaylist(mood, 5);
+                    displayPlaylist(playlist);
+                    provideMoodRecommendation(mood);
+
+                    std::cout << YELLOW << "\nWould you like to add any songs to your favorites? (Enter song number, or 0 to skip): " << RESET;
+                    int favoriteChoice;
+                    std::cin >> favoriteChoice;
+                    if (favoriteChoice > 0 && favoriteChoice <= static_cast<int>(playlist.size())) {
+                        addToFavorites(playlist[favoriteChoice - 1], mood);
+                    }
+                    break;
+                }
+                case 2:
+                    displayFavorites();
+                    break;
+                case 3:
+                    std::cout << "Enter your current happiness level (1-10): ";
+                    std::cin >> userHappinessLevel;
+                    userHappinessLevel = std::max(1, std::min(10, userHappinessLevel));
+                    break;
+                case 4:
+                    displayMostPlayedSongs();
+                    break;
+                case 5:
+                    displayMoodInsights();
+                    break;
+                case 6:
+                    exitProgram = true;
                     break;
                 default:
-                    cout << "Invalid choice. Please try again.\n";
-                    displayFooter();
-                    break;
+                    std::cout << RED << "Invalid choice. Please try again.\n" << RESET;
             }
 
-            if (choice != 10) {
-                clearScreen();
+            if (!exitProgram) {
+                std::cout << YELLOW << "\nPress Enter to continue..." << RESET;
+                std::cin.ignore();
+                std::cin.get();
             }
-        } while (choice != 10);
+            clearScreen();
+        }
+        saveUserPreferences();
+    }
+
+    void clearScreen() {
+        #ifdef _WIN32
+        (void)std::system("cls");
+        #else
+        (void)std::system("clear");
+        #endif
     }
 };
 
 int main() {
-    string user;
-    cout << "Enter your username: ";
-    cin >> user;
-
-    WebDevTerminal terminal(user);
-    terminal.run();
-
+    MoodPlaylistGenerator generator;
+    generator.run();
     return 0;
 }
